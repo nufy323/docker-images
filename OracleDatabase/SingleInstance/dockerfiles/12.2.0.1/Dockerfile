@@ -20,7 +20,7 @@
 #
 # Pull base image
 # ---------------
-FROM oraclelinux:7-slim as base
+FROM oraclelinux:7 as base
 
 # Labels
 # ------
@@ -109,11 +109,41 @@ USER root
 RUN $ORACLE_BASE/oraInventory/orainstRoot.sh && \
     $ORACLE_HOME/root.sh
 
+RUN rm -f /etc/rc.d/init.d/oracle-database-server-12cR2-preinstall-firstboot
+
+RUN yum -y update; yum clean all
+RUN yum -y install systemd; yum clean all; \
+(cd /lib/systemd/system/sysinit.target.wants/; for i in *; do [ $i == systemd-tmpfiles-setup.service ] || rm -f $i; done); \
+rm -f /lib/systemd/system/multi-user.target.wants/*;\
+rm -f /etc/systemd/system/*.wants/*;\
+rm -f /lib/systemd/system/local-fs.target.wants/*; \
+rm -f /lib/systemd/system/sockets.target.wants/*udev*; \
+rm -f /lib/systemd/system/sockets.target.wants/*initctl*; \
+rm -f /lib/systemd/system/basic.target.wants/*;\
+rm -f /lib/systemd/system/anaconda.target.wants/*;
+
+
+RUN yum install -y sudo vi less which wget net-tools fontconfig libaio hwloc libpciaccess lsof libatomic libev \
+    perl tar sg3_utils perl-Time-HiRes perl-DBD-MySQL perl-Digest-MD5 psmisc openssh-server git iproute zsh \   
+    glibc-locale-source glibc-langpack-en glibc sysstat sqlite perl-Data-Dumper crontabs libnsl compat-openssl10 hostname
+
+RUN mkdir -p /var/run/sshd && \
+    echo 'root:123' | chpasswd && \
+    sed -i 's/#PermitRootLogin prohibit-password/PermitRootLogin yes/' /etc/ssh/sshd_config && \
+    ssh-keygen -A
+
 USER oracle
 WORKDIR /home/oracle
 
-HEALTHCHECK --interval=1m --start-period=5m \
-   CMD "$ORACLE_BASE/$CHECK_DB_FILE" >/dev/null || exit 1
+# HEALTHCHECK --interval=1m --start-period=5m \
+#    CMD "$ORACLE_BASE/$CHECK_DB_FILE" >/dev/null || exit 1
 
-# Define default command to start Oracle Database. 
-CMD exec $ORACLE_BASE/$RUN_FILE
+# # Define default command to start Oracle Database. 
+# CMD exec $ORACLE_BASE/$RUN_FILE
+
+
+USER root
+
+VOLUME ["/sys/fs/cgroup"]
+
+CMD ["/usr/sbin/init"]
